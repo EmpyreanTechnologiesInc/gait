@@ -12,11 +12,6 @@ def get_git_diff():
             text=True,
             check=True
         )
-        ''' git commit has output, no need to write again 
-        if not result.stdout.strip():
-            print("No changes have been staged for commit.")
-            return None
-        '''
         return result.stdout
     except subprocess.CalledProcessError as e:
         print(f"Error getting git diff: {e}")
@@ -63,15 +58,15 @@ def generate_commit_message(diff_text):
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        print("Error: OPENAI_API_KEY not found in environment variables")
+        print("Error: OPENAI_API_KEY not found in environment variables. Please set it in .env file.")
         return None
     
     client = OpenAI(api_key=api_key)
     
-    prompt = f"""The following input is in Unified Diff format, 
+    user_prompt = f"""The following Git diff input is in Unified Diff format, 
     which displays changes made to files in a version control system. 
     Analyze the changes and generate a clear, concise commit message that summarizes the main modifications. 
-    Focus on describing the purpose or function of the changes 
+    Focus on describing the purpose or function of the changes. 
     Generate a concise commit message following conventional commits format.
     Requirements:
     - Single line
@@ -81,12 +76,15 @@ def generate_commit_message(diff_text):
     {diff_text}
     """
     
+    system_prompt = """You are a highly knowledgeable assistant specialized 
+    in software development and version control systems.""" 
+    
     try:
         response = client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL", "gpt-4"),  # Default to gpt-4 if not specified
             messages=[
-                {"role": "system", "content": "You are a highly knowledgeable assistant specialized in software development and version control systems. You provide accurate, concise explanations and guide users in best practices for Git and related workflows."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
             max_tokens=4000,
             temperature=0
