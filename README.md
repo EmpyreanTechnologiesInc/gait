@@ -8,20 +8,34 @@
 - [License](#license)
 
 ## Installation
-To install gait, follow these steps:
 
-1. Clone the repository:
+On macOS:
+1. Prerequisites:
+   - Python 3.7 or later (install from [python.org](https://www.python.org/downloads/))
+     ```bash
+     python3 --version  # Verify Python installation
+     ```
+   - Git
+     ```bash
+     git --version    # Verify Git installation
+     ```
+
+2. Clone the repository:
    ```bash
    git clone https://github.com/EmpyreanTechnologiesInc/gait.git
-   cd gait
    ```
 
-2. Install the package:
+3. Install the package:
    ```bash
-   pip install -e .
+   pip install gait
    ```
 
-3. You can now use the `gait` command from anywhere in your terminal.
+4. Verify the installation:
+   ```bash
+   gait --version    # Should display the Git version number
+   ```
+
+You can now use the `gait` command in your terminal when your Python environment is active.
 
 ## Usage
 
