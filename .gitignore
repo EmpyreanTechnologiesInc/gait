@@ -1,4 +1,5 @@
 # .gitignore
+tests/
 
 # macOS system files
 .DS_Store
@@ -6,7 +7,6 @@
 .LSOverride
 
 # Python
-.env
 __pycache__/
 *.py[cod]
 *$py.class
@@ -31,9 +31,12 @@ wheels/
 # Virtual Environment
 venv/
 
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# Environment variables
+.env
+*.env

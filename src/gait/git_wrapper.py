@@ -1,7 +1,11 @@
 import subprocess
 import sys
+from .ai_commit import handle_ai_commit
 
-def run_git_command(command):  
+def run_git_command(command):
+    if len(command) >= 1 and command[0] == "commit" and "--ai" in command:
+        return handle_ai_commit()
+        
     try:
         # Construct the full command
         full_command = ["git"] + command
