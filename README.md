@@ -9,33 +9,52 @@
 
 ## Installation
 
-On macOS:
-1. Prerequisites:
-   - Python 3.7 or later (install from [python.org](https://www.python.org/downloads/))
-     ```bash
-     python3 --version  # Verify Python installation
-     ```
-   - Git
-     ```bash
-     git --version    # Verify Git installation
-     ```
+### Prerequisites
+- Python 3.7 or later ([Download from python.org](https://www.python.org/downloads/))
+  ```bash
+  python3 --version  # Verify Python installation
+  ```
+- Git
+  ```bash
+  git --version    # Verify Git installation
+  ```
 
-2. Clone the repository:
+### Basic Installation
+For macOS:
+1. Clone the repository:
    ```bash
    git clone https://github.com/EmpyreanTechnologiesInc/gait.git
    ```
 
-3. Install the package:
+2. Install the package:
    ```bash
    pip install gait
    ```
 
-4. Verify the installation:
+3. Verify the installation:
    ```bash
    gait --version    # Should display the Git version number
    ```
 
-You can now use the `gait` command in your terminal when your Python environment is active.
+### Setting up AI Features
+1. Configure OpenAI API:
+   - Locate `.env.example` in the gait directory
+   - Rename it to `.env`
+   - Add your OpenAI API key:
+     ```bash
+     OPENAI_API_KEY=your_api_key_here
+     ```
+
+2. (Optional) Configure the AI model in `.env`:
+   ```bash
+   OPENAI_MODEL=gpt-4o-mini  # Default model
+   ```
+
+3. Verify API Connection:
+   ```bash
+   gait test-api
+   ```
+   You should see "API connection successful!". If not, verify your API key and internet connection.
 
 ## Usage
 
@@ -55,6 +74,22 @@ gait checkout -b feature/new-branch
 gait merge main
 ```
 
+### AI-Powered Commit Messages
+The `gait commit --ai` command analyzes your staged changes and uses AI to generate a descriptive commit message. This feature helps maintain consistent and informative commit messages across your project.
+
+```bash
+# Stage your changes first
+gait add .
+
+# Generate AI commit message
+gait commit --ai
+
+# You'll be prompted to:
+# 1. Review the generated message
+# 2. Accept (y), reject (n), or edit (e) the message
+# 3. Once accepted or edited, 'git commit -m "<message>"' will be executed automatically
+```
+
 ## Project Structure
 ```
 gait/
@@ -62,7 +97,9 @@ gait/
 │   └── gait/
 │       ├── __init__.py
 │       ├── main.py
-│       └── git_wrapper.py
+│       ├── git_wrapper.py
+│       ├── ai_commit.py
+│       └── utils.py
 ├── pyproject.toml
 ├── README.md
 ├── LICENSE
