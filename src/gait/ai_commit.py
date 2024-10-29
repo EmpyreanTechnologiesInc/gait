@@ -29,22 +29,22 @@ def handle_ai_commit():
     
     # Show the commit message and ask for confirmation
     print("\nProposed commit message:")
-    print(f"→ {commit_message}")
+    print(f"\033[1;32m→ {commit_message}\033[0m")
     while True:
-        response = input("\nDo you want to proceed with this commit message? (y/n/e[dit]): ").lower().strip()
+        response = input("\nDo you want to proceed with this commit message? (y/n/e[dit]):").lower().strip()
         if response == 'y':
             break
         elif response == 'n':
-            print("Commit cancelled.")
+            print("\033[1;31mCommit cancelled.\033[0m")
             return 1
         elif response == 'e':
-            new_message = input("Enter new commit message: ").strip()
+            new_message = input("\033[1;33mEnter new commit message: \033[0m").strip()
             if new_message:
                 commit_message = new_message
                 break
-            print("Invalid message. Please try again.")
+            print("\033[1;31mInvalid message. Please try again.\033[0m")
         else:
-            print("Please answer 'y' (yes), 'n' (no), or 'e' (edit)")
+            print("\033[1;33mPlease answer 'y' (yes), 'n' (no), or 'e' (edit)\033[0m")
     
     try:
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
@@ -86,7 +86,7 @@ def generate_commit_message(diff_text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=4000,
+            #max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "4000")), # TODO: check if this is needed
             temperature=0
         )
 
