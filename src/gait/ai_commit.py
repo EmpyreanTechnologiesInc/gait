@@ -86,7 +86,6 @@ def generate_commit_message(diff_text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            #max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "4000")), # TODO: check if this is needed
             temperature=0
         )
 
