@@ -28,23 +28,23 @@ def handle_ai_commit():
         return 1
     
     # Show the commit message and ask for confirmation
-    print("\nProposed commit message:")
-    print(f"\033[1;32m→ {commit_message}\033[0m")
+    print("\n--- Proposed commit message ---")
+    print(f"└─→ {commit_message}")  # Bold green arrow and message
     while True:
-        response = input("\nDo you want to proceed with this commit message? (y/n/e[dit]):").lower().strip()
-        if response == 'y':
+        response = input("\n\033[0;36mDo you want to proceed with this commit message? (y/n/e[dit]): \033[0m").lower().strip()
+        if response in ['y', '']:  # Empty response defaults to yes
             break
         elif response == 'n':
-            print("\033[1;31mCommit cancelled.\033[0m")
+            print("\033[0;31mCommit cancelled.\033[0m")  # Bold red for cancellation
             return 1
-        elif response == 'e':
-            new_message = input("\033[1;33mEnter new commit message: \033[0m").strip()
+        elif response in ['e', 'edit']:
+            new_message = input("New commit message: ").strip()
             if new_message:
                 commit_message = new_message
                 break
-            print("\033[1;31mInvalid message. Please try again.\033[0m")
+            print("Invalid message. Please try again.")
         else:
-            print("\033[1;33mPlease answer 'y' (yes), 'n' (no), or 'e' (edit)\033[0m")
+            print("Please answer 'y' (yes), 'n' (no), or 'edit'")
     
     try:
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
