@@ -46,7 +46,7 @@
 
 2. (Optional) Configure the AI model in `.env`:
    ```bash
-   OPENAI_MODEL=gpt-4  # Default model
+   OPENAI_MODEL=gpt-4o-mini  # Default model
    ```
 
 3. Verify API Connection:
