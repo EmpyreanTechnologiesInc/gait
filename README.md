@@ -20,6 +20,7 @@
   ```
 
 ### Basic Installation
+For macOS:
 1. Clone the repository:
    ```bash
    git clone https://github.com/EmpyreanTechnologiesInc/gait.git
