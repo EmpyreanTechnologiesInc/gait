@@ -8,7 +8,7 @@ def test_openai_connection():
         client = OpenAI()
         # Make a minimal API call to test authentication
         client.models.list()
-        model = os.getenv("OPENAI_MODEL", "gpt-4")
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         return True, f"API connection successful! Using model: {model}"
     except AuthenticationError:
         return False, "Authentication failed. Please check your OpenAI API key."
