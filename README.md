@@ -10,11 +10,24 @@
 
 ## Installation
 
-1. Clone and Install
-  For macOS:
+
+### Prerequisites
+- Python 3.7 or later ([Download from python.org](https://www.python.org/downloads/))
+  ```bash
+  python3 --version  # Verify Python installation
+  ```
+- Git
+  ```bash
+  git --version    # Verify Git installation
+  ```
+
+### Basic Installation
+For macOS:
+1. Clone the repository and install:
    ```bash
    # Clone the repository
    git clone https://github.com/EmpyreanTechnologiesInc/gait.git
+
 
    # Navigate to directory and install
    cd gait
@@ -25,6 +38,7 @@
    ```
 
 2. Configure AI Features
+
    ```bash
    # Find the .env.example file in gait directory 
    # Copy and rename it to .env
@@ -62,6 +76,7 @@ gait merge main
 ```
 
 ### Automatically Generate Git Commits with AI
+
 The `gait commit --ai` command analyzes your staged changes and uses AI to generate a descriptive commit message. This feature helps maintain consistent and informative commit messages across your project.
 
 ```bash

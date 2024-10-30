@@ -25,3 +25,4 @@ def test_openai_connection():
         return False, f"\033[1;31mConnection failed\033[0m: {str(e)}"
     except Exception as e:
         return False, f"\033[1;31mAn unexpected error occurred\033[0m: {str(e)}"
+
