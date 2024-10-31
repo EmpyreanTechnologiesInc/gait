@@ -4,10 +4,12 @@
 - [Installation](#installation)
 - [Usage](#usage)
   - [Basic Git Commands](#basic-git-commands)
+  - [Automatically Generate Git Commits with AI](#automatically-generate-git-commits-with-ai)
 - [Project Structure](#project-structure)
 - [License](#license)
 
 ## Installation
+
 
 ### Prerequisites
 - Python 3.7 or later ([Download from python.org](https://www.python.org/downloads/))
@@ -21,40 +23,39 @@
 
 ### Basic Installation
 For macOS:
-1. Clone the repository:
+1. Clone the repository and install:
    ```bash
+   # Clone the repository
    git clone https://github.com/EmpyreanTechnologiesInc/gait.git
+
+
+   # Navigate to directory and install
+   cd gait
+   pip install -e .
+   
+   # Verify installation
+   gait --version # should display the git version number
    ```
 
-2. Install the package:
-   ```bash
-   pip install gait
-   ```
+2. Configure AI Features
 
-3. Verify the installation:
    ```bash
-   gait --version    # Should display the Git version number
-   ```
-
-### Setting up AI Features
-1. Configure OpenAI API:
-   - Locate `.env.example` in the gait directory
-   - Rename it to `.env`
-   - Add your OpenAI API key:
-     ```bash
-     OPENAI_API_KEY=your_api_key_here
-     ```
-
-2. (Optional) Configure the AI model in `.env`:
-   ```bash
+   # Find the .env.example file in gait directory 
+   # Copy and rename it to .env
+   cp .env.example .env
+   
+   # Open the .env file in your preferred editor
+   nano .env   # or vim .env, code .env, etc.
+   
+   # Add your OpenAI API key to .env file
+   OPENAI_API_KEY=your_api_key_here
+   
+   # (Optional) Configure AI model
    OPENAI_MODEL=gpt-4o-mini  # Default model
+   
+   # Test your OpenAI API connection
+   gait test-api # If successful, you'll see: "API connection successful!"
    ```
-
-3. Verify API Connection:
-   ```bash
-   gait test-api
-   ```
-   You should see "API connection successful!". If not, verify your API key and internet connection.
 
 ## Usage
 
@@ -74,7 +75,8 @@ gait checkout -b feature/new-branch
 gait merge main
 ```
 
-### AI-Powered Commit Messages
+### Automatically Generate Git Commits with AI
+
 The `gait commit --ai` command analyzes your staged changes and uses AI to generate a descriptive commit message. This feature helps maintain consistent and informative commit messages across your project.
 
 ```bash

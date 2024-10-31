@@ -55,7 +55,8 @@ def handle_ai_commit():
 
 def generate_commit_message(diff_text):
     """Generate commit message using OpenAI API"""
-    load_dotenv()
+    load_dotenv(override=True)
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print("Error: OPENAI_API_KEY not found in environment variables. Please set it in .env file.")
