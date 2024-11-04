@@ -4,11 +4,16 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from .github_wrapper import create_pull_request, check_gh_auth
 import os
+from pydantic import BaseModel
+import json
 
 """
 AI-powered Pull Request creation module.
 Handles generating and submitting pull requests using OpenAI for content generation.
 """
+class PRContent(BaseModel):
+    title: str
+    body: str
 
 def get_branch_changes() -> Tuple[str, str]:
     """
@@ -123,36 +128,28 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         
         Diff:
         {diff}
-        
-        Format the response exactly as:
-        TITLE: <title>
-        BODY:
-        <body>
         """
         
         system_prompt = """You are a helpful assistant specialized in creating clear 
-        and informative pull request descriptions. Focus on making the changes 
-        easy to understand and review."""
+        and informative pull request descriptions. You must format your response exactly as:
+        TITLE: <title>
+        BODY:
+        <body>"""
         
-        response = client.chat.completions.create(
+        response = client.beta.chat.completions.parse(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
+            response_format=PRContent,
             temperature=0  
         )
         
-        content = response.choices[0].message.content
-        
-        try:
-            title = content.split('TITLE:')[1].split('BODY:')[0].strip()
-            body = content.split('BODY:')[1].strip()
-        except IndexError:
-            print("Error: AI response format was incorrect")
-            return "", ""
-            
-        return title, body
+        content = json.loads(response.choices[0].message.content)
+        #response.choices[0].message.content
+        print("\nDebug - AI Response:", content) 
+        return content["title"], content["body"]
         
     except Exception as e:
         print(f"\nError generating PR content: {str(e)}")
