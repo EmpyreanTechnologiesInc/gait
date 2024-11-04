@@ -120,7 +120,10 @@ The `gait pr create --ai` command analyzes your branch changes and uses AI to ge
 gait push
 
 # Generate AI pull request
-gait pr create --ai
+gait pr create --ai                           # Basic AI-generated PR
+# Other options
+gait pr create --ai --draft                   # Create as draft PR
+gait pr create --ai --base main               # Set target branch
 
 # You'll be prompted to:
 # 1. Review the generated PR title and body
@@ -148,4 +151,3 @@ gait/
 ├── .gitignore
 └── .env.example
 ```
-

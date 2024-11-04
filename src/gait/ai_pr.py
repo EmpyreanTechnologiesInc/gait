@@ -15,9 +15,12 @@ class PRContent(BaseModel):
     title: str
     body: str
 
-def get_branch_changes() -> Tuple[str, str]:
+def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
     """
-    Get the diff and commit messages between current branch and default branch.
+    Get the diff and commit messages between current branch and base branch.
+    
+    Args:
+        base_branch: Target base branch. If None, uses default branch.
     
     Returns:
         Tuple[str, str]: (diff content, commit messages)
@@ -34,34 +37,37 @@ def get_branch_changes() -> Tuple[str, str]:
         ).stdout.strip()
         print(f"Current branch: {current_branch}")
         
-        # Get default branch (usually main or master)
-        try:
-            default_branch = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
-                capture_output=True,
-                text=True,
-                check=True
-            ).stdout.strip().replace('origin/', '')
-        except subprocess.CalledProcessError:
-            # Fallback to common default branch names
-            for branch in ['main', 'master']:
-                try:
-                    subprocess.run(
-                        ["git", "rev-parse", f"origin/{branch}"],
-                        capture_output=True,
-                        check=True
-                    )
-                    default_branch = branch
-                    break
-                except subprocess.CalledProcessError:
-                    continue
-            else:
-                print("Could not determine default branch. Using 'main'")
-                default_branch = 'main'
+        # Use provided base_branch or detect default branch
+        if base_branch:
+            default_branch = base_branch
+        else:
+            try:
+                default_branch = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                ).stdout.strip().replace('origin/', '')
+            except subprocess.CalledProcessError:
+                # Fallback to common default branch names
+                for branch in ['main', 'master']:
+                    try:
+                        subprocess.run(
+                            ["git", "rev-parse", f"origin/{branch}"],
+                            capture_output=True,
+                            check=True
+                        )
+                        default_branch = branch
+                        break
+                    except subprocess.CalledProcessError:
+                        continue
+                else:
+                    print("Could not determine default branch. Using 'main'")
+                    default_branch = 'main'
         
         print(f"Base branch: {default_branch}")
         
-        # Get the diff
+        # Get the diff against the specified base branch
         print("Getting diff...")
         diff = subprocess.run(
             ["git", "diff", f"origin/{default_branch}...origin/{current_branch}"],
@@ -70,7 +76,7 @@ def get_branch_changes() -> Tuple[str, str]:
             check=True
         ).stdout
         
-        # Get commit messages
+        # Get commit messages against the specified base branch
         print("Getting commit messages...")
         commits = subprocess.run(
             ["git", "log", f"origin/{default_branch}..origin/{current_branch}", "--pretty=format:%s"],
@@ -180,9 +186,25 @@ def handle_ai_pr(additional_args: list = None) -> int:
     print("✅ GitHub CLI check passed")
     
     try:
+        # Extract base branch from additional args if present
+        base_branch = None
+        if additional_args:
+            try:
+                # Check for both --base and -b flags
+                base_idx = -1
+                if '--base' in additional_args:
+                    base_idx = additional_args.index('--base')
+                elif '-B' in additional_args:
+                    base_idx = additional_args.index('-B')
+                
+                if base_idx >= 0 and len(additional_args) > base_idx + 1:
+                    base_branch = additional_args[base_idx + 1]
+            except ValueError:
+                pass  # base flag not found in args
+        
         # Get changes
         print("\nGetting branch changes...")
-        diff, commits = get_branch_changes()
+        diff, commits = get_branch_changes(base_branch)
         if not diff and not commits:
             print("❌ No changes detected to create PR.")
             print("Make sure you have:")

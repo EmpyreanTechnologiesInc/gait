@@ -1,6 +1,7 @@
 # Wrapper for GitHub CLI (gh)
 import subprocess
 from typing import Tuple, Optional, List
+import sys
 
 def check_gh_auth() -> Tuple[bool, str]:
     """Check if GitHub CLI is installed and authenticated"""
@@ -70,18 +71,17 @@ def handle_pr_command(args: List[str]) -> int:
         if not guide_auth():
             return 1
 
+    command = ["gh"] + args
+
     try:
         result = subprocess.run(
-            ["gh", "pr"] + args,
+            command,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+            stdout=sys.stdout,
+            stderr=sys.stderr
         )
-        print(result.stdout)
         return result.returncode
     except subprocess.CalledProcessError as e:
-        print(f"Error executing GitHub command: {e.stderr}")
         return e.returncode
     except FileNotFoundError:
         print("GitHub CLI (gh) not installed. Please follow the instructions in README or install it first: https://cli.github.com")

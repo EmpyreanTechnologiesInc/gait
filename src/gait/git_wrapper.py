@@ -18,7 +18,7 @@ def run_git_command(command):
                 return handle_pr_command(command)
     
     try:
-        # Original git command handling
+        # git command handling
         full_command = ["git"] + command
         result = subprocess.run(
             full_command,
