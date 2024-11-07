@@ -2,14 +2,17 @@
 
 ## Table of Contents
 - [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Basic Installation and Configuration](#basic-installation-and-configuration)
+  - [Installing GitHub CLI](#installing-github-cli)
 - [Usage](#usage)
   - [Basic Git Commands](#basic-git-commands)
-  - [Automatically Generate Git Commits with AI](#automatically-generate-git-commits-with-ai)
+  - [AI-Generated Commits](#ai-generated-commits)
+  - [AI-Generated Pull Requests](#ai-generated-pull-requests)
 - [Project Structure](#project-structure)
-- [License](#license)
+
 
 ## Installation
-
 
 ### Prerequisites
 - Python 3.7 or later ([Download from python.org](https://www.python.org/downloads/))
@@ -20,8 +23,10 @@
   ```bash
   git --version    # Verify Git installation
   ```
+- GitHub CLI (for PR features)
+- OpenAI (requires API key)
 
-### Basic Installation
+### BasicInstallation and Configuration
 For macOS:
 1. Clone the repository and install:
    ```bash
@@ -56,6 +61,21 @@ For macOS:
    # Test your OpenAI API connection
    gait test-api # If successful, you'll see: "API connection successful!"
    ```
+
+### Installing GitHub CLI
+For macOS:
+   ```bash
+   # Install Homebrew if you haven't
+   pip install brew
+   
+   # Use brew to install GitHub CLI
+   brew install gh
+   ```
+
+After installation, authenticate with GitHub:
+```bash
+gh auth login # Follow the prompts to complete the authentication process
+```
 
 ## Usage
 
@@ -92,6 +112,25 @@ gait commit --ai
 # 3. Once accepted or edited, 'git commit -m "<message>"' will be executed automatically
 ```
 
+### AI-Generated Pull Requests
+The `gait pr create --ai` command analyzes your branch changes and uses AI to generate a descriptive pull request title and body. This feature helps create comprehensive and well-structured pull requests. All standard `gh pr create` options (like `--draft`, `--base`, etc.) are supported.
+
+```bash
+# Make sure your changes are committed and pushed
+gait push
+
+# Generate AI pull request
+gait pr create --ai                           # Basic AI-generated PR
+# Other options
+gait pr create --ai --draft                   # Create as draft PR
+gait pr create --ai --base main               # Set target branch
+
+# You'll be prompted to:
+# 1. Review the generated PR title and body
+# 2. Accept (y), reject (n), or edit (e) the content
+# 3. Once accepted or edited, the PR will be created automatically using GitHub CLI
+```
+
 ## Project Structure
 ```
 gait/
@@ -100,10 +139,15 @@ gait/
 │       ├── __init__.py
 │       ├── main.py
 │       ├── git_wrapper.py
+│       ├── github_wrapper.py
 │       ├── ai_commit.py
+│       ├── ai_pr.py
 │       └── utils.py
-├── pyproject.toml
 ├── README.md
 ├── LICENSE
-└── .gitignore
+├── setup.py
+├── pyproject.toml
+├── requirements.txt
+├── .gitignore
+└── .env.example
 ```

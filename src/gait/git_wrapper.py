@@ -1,16 +1,25 @@
 import subprocess
 import sys
 from .ai_commit import handle_ai_commit
+from .ai_pr import handle_ai_pr
+from .github_wrapper import handle_pr_command
 
 def run_git_command(command):
-    if len(command) >= 1 and command[0] == "commit" and "--ai" in command:
-        return handle_ai_commit()
-        
+    if len(command) >= 1:
+        if command[0] == "commit" and "--ai" in command:
+            return handle_ai_commit()
+        elif command[0] == "pr" and "create" in command:
+            if "--ai" in command:
+                # Remove --ai flag before passing additional args
+                filtered_args = [arg for arg in command if arg != "--ai"]
+                return handle_ai_pr(filtered_args)
+            else:
+                # Forward to github_wrapper
+                return handle_pr_command(command)
+    
     try:
-        # Construct the full command
+        # git command handling
         full_command = ["git"] + command
-        
-        # Run the Git command and direct its output to terminal
         result = subprocess.run(
             full_command,
             check=True,
