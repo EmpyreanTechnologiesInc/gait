@@ -6,6 +6,10 @@ from .github_wrapper import create_pull_request, check_gh_auth
 import os
 from pydantic import BaseModel
 import json
+import re
+from gql import gql, Client
+from gql.transport.requests import RequestsHTTPTransport
+from gql.transport.exceptions import TransportQueryError
 
 """
 AI-powered Pull Request creation module.
@@ -257,6 +261,145 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         print("3. You have access to the specified model")
         return "", ""
 
+def create_linear_issue(title: str) -> str:
+    """
+    Create a Linear issue using GraphQL API.
+    
+    Args:
+        title: Issue title
+    
+    Returns:
+        str: Issue identifier (e.g., 'ENG-123')
+    """
+    api_key = os.getenv("LINEAR_API_KEY")
+    team_id = os.getenv("LINEAR_TEAM_ID")
+    project_id = os.getenv("LINEAR_PROJECT_ID")
+    
+    if not api_key:
+        print("Error: LINEAR_API_KEY not found in environment variables")
+        return None
+    
+    if not team_id:
+        print("Error: LINEAR_TEAM_ID not found in environment variables")
+        return None
+        
+    if not project_id:
+        print("Error: LINEAR_PROJECT_ID not found in environment variables")
+        return None
+        
+    transport = RequestsHTTPTransport(
+        url='https://api.linear.app/graphql',
+        headers={'Authorization': api_key}
+    )
+    
+    client = Client(transport=transport, fetch_schema_from_transport=True)
+    
+    # Create issue with project ID
+    mutation = gql("""
+        mutation CreateIssue($title: String!, $teamId: String!, $projectId: String!) {
+            issueCreate(input: {
+                title: $title,
+                teamId: $teamId,
+                projectId: $projectId
+            }) {
+                success
+                issue {
+                    identifier
+                }
+            }
+        }
+    """)
+    
+    try:
+        result = client.execute(mutation, variable_values={
+            'title': title,
+            'teamId': team_id,
+            'projectId': project_id
+        })
+        return result['issueCreate']['issue']['identifier']
+        
+    except TransportQueryError as e:
+        print(f"Error creating Linear issue: {str(e)}")
+        # If there's an error, let's query available teams and projects for debugging
+        try:
+            query = gql("""
+                query {
+                    teams {
+                        nodes {
+                            id
+                            name
+                            projects {
+                                nodes {
+                                    id
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            """)
+            result = client.execute(query)
+            print("\nAvailable Linear teams and projects:")
+            for team in result['teams']['nodes']:
+                print(f"\nTeam: {team['name']} (ID: {team['id']})")
+                print("Projects:")
+                for project in team['projects']['nodes']:
+                    print(f"  - {project['name']} (ID: {project['id']})")
+        except Exception as e:
+            print(f"Error fetching teams and projects: {str(e)}")
+        return None
+
+def process_todos(diff: str) -> Tuple[str, list]:
+    """
+    Process TODOs in the diff and create Linear issues.
+    
+    Returns:
+        Tuple[str, list]: Updated diff and list of (file_path, line_num, issue_id, comment)
+    """
+    todo_pattern = r'^\+.*TODO:?\s*(.+)$'
+    todos = []
+    
+    # Parse diff to find new TODOs
+    current_file = None
+    for line in diff.split('\n'):
+        if line.startswith('+++'):
+            current_file = line[6:]
+        elif line.startswith('+'):
+            match = re.search(todo_pattern, line)
+            if match and current_file:
+                comment = match.group(1)
+                issue_id = create_linear_issue(comment)
+                if not issue_id:  # 如果创建失败，提前返回
+                    print("❌ Failed to create Linear issue. Aborting TODO processing.")
+                    return diff, []
+                todos.append((current_file, line, issue_id, comment))
+    
+    # Update TODOs in files
+    for file_path, line, issue_id, comment in todos:
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+            
+            # Replace TODO with TODO(issue_id)
+            updated_content = content.replace(
+                f'TODO: {comment}',
+                f'TODO({issue_id}): {comment}'
+            )
+            
+            with open(file_path, 'w') as f:
+                f.write(updated_content)
+                
+            # Commit and push changes
+            subprocess.run(['git', 'add', file_path], check=True)
+            subprocess.run(['git', 'commit', '-m', f'Update TODO with Linear issue {issue_id}'], check=True)
+            subprocess.run(['git', 'push'], check=True)
+            
+        except Exception as e:
+            print(f"Error updating TODO in {file_path}: {str(e)}")
+            return diff, []  # 如果更新失败，也提前返回
+    
+    return diff, todos
+
 def handle_ai_pr(additional_args: list = None) -> int:              
     """
     Handle the AI PR creation process.
@@ -300,7 +443,14 @@ def handle_ai_pr(additional_args: list = None) -> int:
             return 1
         print("✅ Got branch changes")
             
-        # Generate content
+        # Process TODOs
+        print("\nChecking for new TODOs...")
+        diff, todos = process_todos(diff)
+        if todos is None:  # 如果 process_todos 返回 None，表示处理失败
+            print("❌ TODO processing failed. Aborting PR creation.")
+            return 1
+        
+        # 只有在 TODO 处理成功后才继续
         print("\nGenerating PR content using AI...")
         title, body = generate_pr_content(diff, commits)
         if not title or not body:

@@ -25,7 +25,7 @@
   ```
 - GitHub CLI (for PR features)
 - OpenAI (requires API key)
-
+- Linear (requires API key and team ID)
 ### BasicInstallation and Configuration
 For macOS:
 1. Clone the repository and install:
