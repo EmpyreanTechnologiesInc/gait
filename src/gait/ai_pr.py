@@ -37,6 +37,19 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
         ).stdout.strip()
         print(f"Current branch: {current_branch}")
         
+        # Check for unpushed commits
+        unpushed = subprocess.run(
+            ["git", "log", f"origin/{current_branch}..{current_branch}", "--oneline"],
+            capture_output=True,
+            text=True,
+            check=True
+        ).stdout.strip()
+        
+        if unpushed:
+            print("❌ You have unpushed commits. Please push your changes first:")
+            print(f"git push origin {current_branch}")
+            return "", ""
+        
         # Use provided base_branch or detect default branch
         if base_branch:
             default_branch = base_branch
@@ -86,7 +99,11 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
         ).stdout
         
         if not diff and not commits:
-            print("No changes detected. Have you pushed your changes?")
+            print("❌ No changes detected to create PR.")
+            print("Make sure you have:")
+            print("1. Made some changes")
+            print("2. Committed your changes")
+            print("3. Pushed your changes to remote")
             return "", ""
             
         return diff, commits
@@ -153,8 +170,6 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         )
         
         content = json.loads(response.choices[0].message.content)
-        #response.choices[0].message.content
-        print("\nDebug - AI Response:", content) 
         return content["title"], content["body"]
         
     except Exception as e:
@@ -206,11 +221,6 @@ def handle_ai_pr(additional_args: list = None) -> int:
         print("\nGetting branch changes...")
         diff, commits = get_branch_changes(base_branch)
         if not diff and not commits:
-            print("❌ No changes detected to create PR.")
-            print("Make sure you have:")
-            print("1. Made some changes")
-            print("2. Committed your changes")
-            print("3. Pushed your changes to remote")
             return 1
         print("✅ Got branch changes")
             
