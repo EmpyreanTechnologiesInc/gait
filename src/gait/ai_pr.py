@@ -37,19 +37,96 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
         ).stdout.strip()
         print(f"Current branch: {current_branch}")
         
-        # Check for unpushed commits
-        unpushed = subprocess.run(
-            ["git", "log", f"origin/{current_branch}..{current_branch}", "--oneline"],
+        # Check if remote branch exists
+        remote_exists = subprocess.run(
+            ["git", "ls-remote", "--heads", "origin", current_branch],
             capture_output=True,
             text=True,
             check=True
         ).stdout.strip()
         
-        if unpushed:
-            print("❌ You have unpushed commits. Please push your changes first:")
-            print(f"git push origin {current_branch}")
-            return "", ""
-        
+        if remote_exists:
+            # Remote branch exists
+            print(f"\nRemote branch 'origin/{current_branch}' exists.")
+            
+            # Check for unpushed changes
+            unpushed = subprocess.run(
+                ["git", "log", f"origin/{current_branch}..{current_branch}", "--oneline"],
+                capture_output=True,
+                text=True,
+                check=True
+            ).stdout.strip()
+            
+            if unpushed:
+                print("You have unpushed commits.")
+            
+            while True:
+                response = input(f"\033[1;33mWould you like to:\n"
+                              f"1. Use/Push to existing remote branch 'origin/{current_branch}'\n"
+                              f"2. Create a new remote branch\n"
+                              f"Choose (1/2): \033[0m").strip()
+                
+                if response == '1':
+                    if unpushed:
+                        try:
+                            subprocess.run(
+                                ["git", "push", "origin", current_branch],
+                                check=True
+                            )
+                            print(f"✅ Changes pushed to origin/{current_branch}")
+                        except subprocess.CalledProcessError as e:
+                            print(f"❌ Failed to push changes: {e}")
+                            return "", ""
+                    else:
+                        print(f"✅ Using existing remote branch: origin/{current_branch}")
+                    break
+                elif response == '2':
+                    new_branch_name = input("\033[1;32mEnter new remote branch name: \033[0m").strip()
+                    if not new_branch_name:
+                        print("Branch name cannot be empty")
+                        continue
+                    
+                    try:
+                        subprocess.run(
+                            ["git", "push", "-u", "origin", f"{current_branch}:{new_branch_name}"],
+                            check=True
+                        )
+                        print(f"✅ Created and pushed to remote branch: origin/{new_branch_name}")
+                        current_branch = new_branch_name
+                        break
+                    except subprocess.CalledProcessError as e:
+                        print(f"❌ Failed to create remote branch: {e}")
+                        return "", ""
+                else:
+                    print("Please choose 1 or 2")
+        else:
+            # Remote branch doesn't exist
+            print(f"\nRemote branch 'origin/{current_branch}' doesn't exist.")
+            while True:
+                response = input(f"\033[1;33mWould you like to create a remote branch? (y/n): \033[0m").lower()
+                if response == 'y':
+                    new_branch_name = input("\033[1;32mEnter remote branch name (press Enter to use current branch name): \033[0m").strip()
+                    remote_branch = new_branch_name if new_branch_name else current_branch
+                    
+                    try:
+                        subprocess.run(
+                            ["git", "push", "-u", "origin", f"{current_branch}:{remote_branch}"],
+                            check=True
+                        )
+                        print(f"✅ Created and pushed to remote branch: origin/{remote_branch}")
+                        current_branch = remote_branch
+                        break
+                    except subprocess.CalledProcessError as e:
+                        print(f"❌ Failed to create remote branch: {e}")
+                        return "", ""
+                elif response == 'n':
+                    print("\n❌ Please create a remote branch first using:")
+                    print(f"git push -u origin {current_branch}:<new-branch-name>")
+                    print("Or run this command again and choose 'y'")
+                    return "", ""
+                else:
+                    print("Please answer 'y' (yes) or 'n' (no)")
+
         # Use provided base_branch or detect default branch
         if base_branch:
             default_branch = base_branch
@@ -218,7 +295,6 @@ def handle_ai_pr(additional_args: list = None) -> int:
                 pass  # base flag not found in args
         
         # Get changes
-        print("\nGetting branch changes...")
         diff, commits = get_branch_changes(base_branch)
         if not diff and not commits:
             return 1
@@ -255,7 +331,6 @@ def handle_ai_pr(additional_args: list = None) -> int:
                 print("\033[1mEnter your text (Ctrl+D or Ctrl+Z to finish):\033[0m")
                 
                 try:
-                    # 收集多行输入
                     lines = []
                     while True:
                         try:
