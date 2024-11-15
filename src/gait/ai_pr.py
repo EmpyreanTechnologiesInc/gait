@@ -261,16 +261,15 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         print("3. You have access to the specified model")
         return "", ""
 
-def create_linear_issue(title: str) -> str:
-    """
-    Create a Linear issue using GraphQL API.
+def create_linear_issue(title: str, test_mode: bool = False) -> str:
+    """Create a Linear issue using GraphQL API."""
+    if test_mode:
+        # In test mode, just return a mock issue ID
+        return f"ENG-{abs(hash(title)) % 1000}"
+        
+    # Original implementation for production...
+    load_dotenv(override=True)
     
-    Args:
-        title: Issue title
-    
-    Returns:
-        str: Issue identifier (e.g., 'ENG-123')
-    """
     api_key = os.getenv("LINEAR_API_KEY")
     team_id = os.getenv("LINEAR_TEAM_ID")
     project_id = os.getenv("LINEAR_PROJECT_ID")
@@ -349,56 +348,97 @@ def create_linear_issue(title: str) -> str:
             print(f"Error fetching teams and projects: {str(e)}")
         return None
 
-def process_todos(diff: str) -> Tuple[str, list]:
-    """
-    Process TODOs in the diff and create Linear issues.
+def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
+    """Process TODOs in the diff and create Linear issues."""
+    comment_prefix = r'^\+\s*(?:#|//)\s*'
+    todo_pattern = fr'{comment_prefix}TODO(?:\(([^)]*)\))?:\s+(.+)$'
+    issue_id_pattern = r'^[A-Z]{2,}-\d+$'
     
-    Returns:
-        Tuple[str, list]: Updated diff and list of (file_path, line_num, issue_id, comment)
-    """
-    todo_pattern = r'^\+.*TODO:?\s*(.+)$'
     todos = []
-    
-    # Parse diff to find new TODOs
     current_file = None
+    updated_lines = []
+    
+    print("\nDebug - Processing lines:")
+    # 收集需要更新的文件和修改
+    file_changes = {}  # 存储每个文件的修改: {file_path: [(old_line, new_line)]}
+    
     for line in diff.split('\n'):
         if line.startswith('+++'):
             current_file = line[6:]
-        elif line.startswith('+'):
-            match = re.search(todo_pattern, line)
-            if match and current_file:
-                comment = match.group(1)
-                issue_id = create_linear_issue(comment)
-                if not issue_id:  # 如果创建失败，提前返回
-                    print("❌ Failed to create Linear issue. Aborting TODO processing.")
-                    return diff, []
-                todos.append((current_file, line, issue_id, comment))
+            if current_file.startswith('b/'):  # 去除 git diff 的 b/ 前缀
+                current_file = current_file[2:]
+            updated_lines.append(line)
+            continue
+            
+        if not line.startswith('+'):
+            updated_lines.append(line)
+            continue
+            
+        # 检查是否是 TODO
+        todo_match = re.search(todo_pattern, line)
+        if not todo_match or not current_file:
+            updated_lines.append(line)
+            continue
+            
+        context = todo_match.group(1)  # 可能是 None
+        comment = todo_match.group(2).strip()
+        
+        if context and re.match(issue_id_pattern, context):
+            print(f"Debug - Skipping TODO with existing issue ID: {context} -> '{comment}'")
+            todos.append((current_file, line, context, comment))
+            updated_lines.append(line)
+            continue
+            
+        # 创建新的 issue
+        print(f"Debug - Creating new issue for TODO{f' with context: {context}' if context else ''}: '{comment}'")
+        issue_id = create_linear_issue(comment, test_mode=test_mode)
+        if issue_id:
+            # 构造新的 TODO 行
+            indent = re.match(r'^\+\s*', line).group()  # 保持原有缩进
+            comment_symbol = '#' if '#' in line else '//'  # 保持原有注释符号
+            new_line = f"{indent}{comment_symbol} TODO({issue_id}): {comment}"
+            
+            # 记录文件修改
+            if current_file not in file_changes:
+                file_changes[current_file] = []
+            file_changes[current_file].append((
+                line.lstrip('+'),  # 存储不带 + 的原始行
+                new_line.lstrip('+')  # 存储不带 + 的新行
+            ))
+            
+            todos.append((current_file, new_line, issue_id, comment))
+            updated_lines.append(new_line)
+        else:
+            updated_lines.append(line)
     
-    # Update TODOs in files
-    for file_path, line, issue_id, comment in todos:
-        try:
-            with open(file_path, 'r') as f:
-                content = f.read()
-            
-            # Replace TODO with TODO(issue_id)
-            updated_content = content.replace(
-                f'TODO: {comment}',
-                f'TODO({issue_id}): {comment}'
-            )
-            
-            with open(file_path, 'w') as f:
-                f.write(updated_content)
+    if not test_mode:
+        for file_path, changes in file_changes.items():
+            try:
+                print(f"\nUpdating file: {file_path}")
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.readlines()  # 按行读取
                 
-            # Commit and push changes
-            subprocess.run(['git', 'add', file_path], check=True)
-            subprocess.run(['git', 'commit', '-m', f'Update TODO with Linear issue {issue_id}'], check=True)
-            subprocess.run(['git', 'push'], check=True)
-            
-        except Exception as e:
-            print(f"Error updating TODO in {file_path}: {str(e)}")
-            return diff, []  # 如果更新失败，也提前返回
+                # 逐行更新内容
+                updated_content = []
+                for line in content:
+                    line_stripped = line.rstrip('\n')
+                    # 检查这行是否需要更新
+                    for old_line, new_line in changes:
+                        if line_stripped == old_line.strip():
+                            line = new_line + '\n'
+                            break
+                    updated_content.append(line)
+                
+                # 写回文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.writelines(updated_content)
+                    
+                print(f"✅ Updated {len(changes)} TODOs in {file_path}")
+                
+            except Exception as e:
+                print(f"❌ Error updating {file_path}: {str(e)}")
     
-    return diff, todos
+    return '\n'.join(updated_lines), todos
 
 def handle_ai_pr(additional_args: list = None) -> int:              
     """
@@ -446,7 +486,7 @@ def handle_ai_pr(additional_args: list = None) -> int:
         # Process TODOs
         print("\nChecking for new TODOs...")
         diff, todos = process_todos(diff)
-        if todos is None:  # 如果 process_todos 返回 None，表示处理失败
+        if not todos:  # 如果 process_todos 返回 None，表示处理失败
             print("❌ TODO processing failed. Aborting PR creation.")
             return 1
         
