@@ -7,9 +7,7 @@ import os
 from pydantic import BaseModel
 import json
 import re
-from gql import gql, Client
-from gql.transport.requests import RequestsHTTPTransport
-from gql.transport.exceptions import TransportQueryError
+from .linear_client import LinearClient
 
 """
 AI-powered Pull Request creation module.
@@ -261,111 +259,30 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         print("3. You have access to the specified model")
         return "", ""
 
-def create_linear_issue(title: str, test_mode: bool = False) -> str:
-    """Create a Linear issue using GraphQL API."""
-    if test_mode:
-        # In test mode, just return a mock issue ID
-        return f"ENG-{abs(hash(title)) % 1000}"
-        
-    # Original implementation for production...
-    load_dotenv(override=True)
-    
-    api_key = os.getenv("LINEAR_API_KEY")
-    team_id = os.getenv("LINEAR_TEAM_ID")
-    project_id = os.getenv("LINEAR_PROJECT_ID")
-    
-    if not api_key:
-        print("Error: LINEAR_API_KEY not found in environment variables")
-        return None
-    
-    if not team_id:
-        print("Error: LINEAR_TEAM_ID not found in environment variables")
-        return None
-        
-    if not project_id:
-        print("Error: LINEAR_PROJECT_ID not found in environment variables")
-        return None
-        
-    transport = RequestsHTTPTransport(
-        url='https://api.linear.app/graphql',
-        headers={'Authorization': api_key}
-    )
-    
-    client = Client(transport=transport, fetch_schema_from_transport=True)
-    
-    # Create issue with project ID
-    mutation = gql("""
-        mutation CreateIssue($title: String!, $teamId: String!, $projectId: String!) {
-            issueCreate(input: {
-                title: $title,
-                teamId: $teamId,
-                projectId: $projectId
-            }) {
-                success
-                issue {
-                    identifier
-                }
-            }
-        }
-    """)
-    
-    try:
-        result = client.execute(mutation, variable_values={
-            'title': title,
-            'teamId': team_id,
-            'projectId': project_id
-        })
-        return result['issueCreate']['issue']['identifier']
-        
-    except TransportQueryError as e:
-        print(f"Error creating Linear issue: {str(e)}")
-        # If there's an error, let's query available teams and projects for debugging
-        try:
-            query = gql("""
-                query {
-                    teams {
-                        nodes {
-                            id
-                            name
-                            projects {
-                                nodes {
-                                    id
-                                    name
-                                }
-                            }
-                        }
-                    }
-                }
-            """)
-            result = client.execute(query)
-            print("\nAvailable Linear teams and projects:")
-            for team in result['teams']['nodes']:
-                print(f"\nTeam: {team['name']} (ID: {team['id']})")
-                print("Projects:")
-                for project in team['projects']['nodes']:
-                    print(f"  - {project['name']} (ID: {project['id']})")
-        except Exception as e:
-            print(f"Error fetching teams and projects: {str(e)}")
-        return None
-
 def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
     """Process TODOs in the diff and create Linear issues."""
-    comment_prefix = r'^\+\s*(?:#|//)\s*'
-    todo_pattern = fr'{comment_prefix}TODO(?:\(([^)]*)\))?:\s+(.+)$'
+    comment_prefix = r'^\+\s*(?:#|//|/\*)\s*'
+    todo_pattern = fr'{comment_prefix}TODO(?:\(([^)]*)\))?:\s+(.+?)(?:\s*\*/)?\s*$'
     issue_id_pattern = r'^[A-Z]{2,}-\d+$'
     
     todos = []
     current_file = None
     updated_lines = []
+    file_changes = {}
+    
+    try:
+        linear_client = None if test_mode else LinearClient(test_mode=test_mode)
+    except ValueError as e:
+        print(f"⚠️ Linear client initialization failed: {str(e)}")
+        print("Will continue without creating Linear issues")
+        linear_client = None
     
     print("\nDebug - Processing lines:")
-    # 收集需要更新的文件和修改
-    file_changes = {}  # 存储每个文件的修改: {file_path: [(old_line, new_line)]}
     
     for line in diff.split('\n'):
         if line.startswith('+++'):
             current_file = line[6:]
-            if current_file.startswith('b/'):  # 去除 git diff 的 b/ 前缀
+            if current_file.startswith('b/'):
                 current_file = current_file[2:]
             updated_lines.append(line)
             continue
@@ -374,13 +291,12 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
             updated_lines.append(line)
             continue
             
-        # 检查是否是 TODO
         todo_match = re.search(todo_pattern, line)
         if not todo_match or not current_file:
             updated_lines.append(line)
             continue
             
-        context = todo_match.group(1)  # 可能是 None
+        context = todo_match.group(1)
         comment = todo_match.group(2).strip()
         
         if context and re.match(issue_id_pattern, context):
@@ -389,54 +305,80 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
             updated_lines.append(line)
             continue
             
-        # 创建新的 issue
         print(f"Debug - Creating new issue for TODO{f' with context: {context}' if context else ''}: '{comment}'")
-        issue_id = create_linear_issue(comment, test_mode=test_mode)
+        issue_id = linear_client.create_issue(comment) if linear_client else None
+        print(f"Debug - Created issue: {issue_id}")
+        
         if issue_id:
-            # 构造新的 TODO 行
-            indent = re.match(r'^\+\s*', line).group()  # 保持原有缩进
-            comment_symbol = '#' if '#' in line else '//'  # 保持原有注释符号
+            indent = re.match(r'^\+\s*', line).group()
+            comment_symbol = '#' if '#' in line else '//'
             new_line = f"{indent}{comment_symbol} TODO({issue_id}): {comment}"
             
-            # 记录文件修改
             if current_file not in file_changes:
                 file_changes[current_file] = []
             file_changes[current_file].append((
-                line.lstrip('+'),  # 存储不带 + 的原始行
-                new_line.lstrip('+')  # 存储不带 + 的新行
+                line.lstrip('+'),
+                new_line.lstrip('+')
             ))
             
             todos.append((current_file, new_line, issue_id, comment))
             updated_lines.append(new_line)
         else:
+            print(f"⚠️ Keeping original TODO line due to Linear issue creation failure")
+            todos.append((current_file, line, None, comment))
             updated_lines.append(line)
     
-    if not test_mode:
+    # Update files if we have changes
+    if not test_mode and file_changes:
         for file_path, changes in file_changes.items():
             try:
                 print(f"\nUpdating file: {file_path}")
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.readlines()  # 按行读取
+                    content = f.readlines()
                 
-                # 逐行更新内容
+                # 修改更新逻辑，使用更精确的匹配
                 updated_content = []
                 for line in content:
                     line_stripped = line.rstrip('\n')
-                    # 检查这行是否需要更新
+                    matched = False
                     for old_line, new_line in changes:
-                        if line_stripped == old_line.strip():
-                            line = new_line + '\n'
+                        # 使用更严格的比较，确保完全匹配
+                        if line_stripped.strip() == old_line.strip():
+                            updated_content.append(new_line + '\n')
+                            matched = True
                             break
-                    updated_content.append(line)
+                    if not matched:
+                        updated_content.append(line)
                 
-                # 写回文件
+                # 在写入前打印调试信息
+                print(f"Debug - Original content length: {len(content)}")
+                print(f"Debug - Updated content length: {len(updated_content)}")
+                print(f"Debug - Changes to apply: {len(changes)}")
+                
+                # 写入文件
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.writelines(updated_content)
-                    
-                print(f"✅ Updated {len(changes)} TODOs in {file_path}")
                 
+                # 验证更改是否成功应用
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    verify_content = f.read()
+                    for _, new_line in changes:
+                        if new_line not in verify_content:
+                            print(f"⚠️ Warning: Failed to verify change: {new_line}")
+                
+                # Commit and push changes
+                try:
+                    subprocess.run(["git", "add", file_path], check=True)
+                    commit_msg = f"Update TODO references with Linear ticket IDs\n\nUpdated {len(changes)} TODOs in {file_path}"
+                    subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+                    subprocess.run(["git", "push"], check=True)
+                    print(f"✅ Updated and committed {len(changes)} TODOs in {file_path}")
+                except subprocess.CalledProcessError as e:
+                    print(f"❌ Error committing changes: {str(e)}")
+                    
             except Exception as e:
                 print(f"❌ Error updating {file_path}: {str(e)}")
+                print(f"Error details: {type(e).__name__}: {str(e)}")
     
     return '\n'.join(updated_lines), todos
 
