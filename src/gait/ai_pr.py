@@ -269,13 +269,13 @@ def process_todos(diff: str) -> Tuple[str, list]:
     current_file = None
     updated_lines = []
     file_changes = {}
+    linear_client = None
     
     try:
         linear_client = LinearClient()
     except ValueError as e:
         print(f"⚠️ Linear client initialization failed: {str(e)}")
-        linear_client = None
-        return None, None
+        return diff, None  # Return original diff and None for todos to trigger the confirmation prompt
         
     for line in diff.split('\n'):
         if line.startswith('+++'):
@@ -308,6 +308,10 @@ def process_todos(diff: str) -> Tuple[str, list]:
             context=context
         ) if linear_client else None
         
+        if not issue_id:
+            print(f"⚠️ Linear issue creation failed")
+            return diff, None  # Return original diff and None to trigger confirmation prompt
+            
         if issue_id:
             indent = re.match(r'^\+\s*', line).group()
             comment_symbol = '#' if '#' in line else '//'
@@ -421,7 +425,7 @@ def handle_ai_pr(additional_args: list = None) -> int:
         # Process TODOs
         print("\nChecking for new TODOs...")
         diff, todos = process_todos(diff)
-        if not todos:
+        if todos is None:
             print("⚠️ TODO processing failed.")
             while True:
                 response = input("\033[1;33mWould you like to continue creating PR without processing TODOs? (y/n): \033[0m").lower()

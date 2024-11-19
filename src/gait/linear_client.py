@@ -16,10 +16,12 @@ class LinearClient:
         self.api_key = os.getenv("LINEAR_API_KEY")
         self.team_id = os.getenv("LINEAR_TEAM_ID")
         self.project_id = os.getenv("LINEAR_PROJECT_ID")
-        
         # Check API key and team ID first
-        if not all([self.api_key, self.team_id]):
-            raise ValueError("Missing required Linear API key or team ID")
+        if not self.api_key:
+            raise ValueError("Missing required Linear API key")
+        
+        if not self.team_id:
+            raise ValueError("Missing required Linear team ID")
             
         # Special handling for missing project ID
         if not self.project_id:
@@ -79,7 +81,11 @@ class LinearClient:
             return result['issueCreate']['issue']['identifier']
             
         except TransportQueryError as e:
-            print(f"Error creating Linear issue: {str(e)}")
+            error_data = e.errors[0].get('extensions', {})
+            error_type = error_data.get('type', 'Unknown error')
+            error_message = error_data.get('userPresentableMessage', str(e))
+            print(f"❌ Error creating Linear issue: {error_type} - {error_message}")
+            print(" Please check your Linear API key and team ID")
             self.list_available_teams()
             return None
             
@@ -111,4 +117,8 @@ class LinearClient:
                     print(f"Project ID: {project['id']}, Name: {project['name']}")
             
         except TransportQueryError as e:
-            print(f"Error listing teams and projects: {str(e)}")
+            error_data = e.errors[0].get('extensions', {})
+            error_type = error_data.get('type', 'Unknown error')
+            error_message = error_data.get('userPresentableMessage', str(e))
+            print(f"❌ Error listing teams and projects: {error_type} - {error_message}")
+            print(" Please check your Linear API key and team ID")
