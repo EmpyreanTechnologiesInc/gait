@@ -259,7 +259,7 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         print("3. You have access to the specified model")
         return "", ""
 
-def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
+def process_todos(diff: str) -> Tuple[str, list]:
     """Process TODOs in the diff and create Linear issues."""
     comment_prefix = r'\+.*?(?:#|//|/\*)\s*'
     todo_pattern = fr'{comment_prefix}TODO\s*(?:\(([^)]*)\))?\s*:\s*(.+?)(?:\s*\*/)?\s*$'
@@ -271,7 +271,7 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
     file_changes = {}
     
     try:
-        linear_client = None if test_mode else LinearClient(test_mode=test_mode)
+        linear_client = LinearClient()
     except ValueError as e:
         print(f"⚠️ Linear client initialization failed: {str(e)}")
         linear_client = None
@@ -311,7 +311,7 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
         if issue_id:
             indent = re.match(r'^\+\s*', line).group()
             comment_symbol = '#' if '#' in line else '//'
-            new_line = f"{indent}{comment_symbol} TODO({issue_id}): {comment}"
+            new_line = f"{indent}{comment_symbol} TODO({issue_id}):({context}):{comment}"
             
             if current_file not in file_changes:
                 file_changes[current_file] = []
@@ -328,7 +328,7 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
             updated_lines.append(line)
     
     # Update files if we have changes
-    if not test_mode and file_changes:
+    if file_changes:
         for file_path, changes in file_changes.items():
             try:
                 print(f"\nUpdating file: {file_path}")
@@ -362,7 +362,7 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
                 # Commit and push changes
                 try:
                     subprocess.run(["git", "add", file_path], check=True)
-                    commit_msg = f"Update TODO references with Linear ticket IDs\n\nUpdated {len(changes)} TODOs in {file_path}"
+                    commit_msg = f"Update {len(changes)} TODOs in {file_path} with Linear issue IDs"
                     subprocess.run(["git", "commit", "-m", commit_msg], check=True)
                     subprocess.run(["git", "push"], check=True)
                     print(f"✅ Updated and committed {len(changes)} TODOs in {file_path}")
