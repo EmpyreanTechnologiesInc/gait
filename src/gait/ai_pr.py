@@ -315,7 +315,7 @@ def process_todos(diff: str) -> Tuple[str, list]:
         if issue_id:
             indent = re.match(r'^\+\s*', line).group()
             comment_symbol = '#' if '#' in line else '//'
-            new_line = f"{indent}{comment_symbol} TODO({issue_id}):({context}):{comment}"
+            new_line = f"{indent}{comment_symbol} TODO({issue_id}):{comment}" if context is None else f"{indent}{comment_symbol} TODO({issue_id}):({context}):({comment})"
             
             if current_file not in file_changes:
                 file_changes[current_file] = []
@@ -333,49 +333,57 @@ def process_todos(diff: str) -> Tuple[str, list]:
     
     # Update files if we have changes
     if file_changes:
-        for file_path, changes in file_changes.items():
-            try:
-                print(f"\nUpdating file: {file_path}")
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.readlines()
-                
-                updated_content = []
-                for line in content:
-                    line_stripped = line.rstrip('\n')
-                    matched = False
-                    for old_line, new_line in changes:
-                        # strict match
-                        if line_stripped.strip() == old_line.strip():
-                            updated_content.append(new_line + '\n')
-                            matched = True
-                            break
-                    if not matched:
-                        updated_content.append(line)
-                
-                # update file 
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.writelines(updated_content)
-                
-                # verify changes
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    verify_content = f.read()
-                    for _, new_line in changes:
-                        if new_line not in verify_content:
-                            print(f"⚠️ Warning: Failed to verify change: {new_line}")
-                
-                # Commit and push changes
+        try:
+            # Update all files first
+            for file_path, changes in file_changes.items():
                 try:
-                    subprocess.run(["git", "add", file_path], check=True)
-                    commit_msg = f"Update {len(changes)} TODOs in {file_path} with Linear issue IDs"
-                    subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-                    subprocess.run(["git", "push"], check=True)
-                    print(f"✅ Updated and committed {len(changes)} TODOs in {file_path}")
-                except subprocess.CalledProcessError as e:
-                    print(f"❌ Error committing changes: {str(e)}")
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.readlines()
                     
-            except Exception as e:
-                print(f"❌ Error updating {file_path}: {str(e)}")
-                print(f"Error details: {type(e).__name__}: {str(e)}")
+                    updated_content = []
+                    for line in content:
+                        line_stripped = line.rstrip('\n')
+                        matched = False
+                        for old_line, new_line in changes:
+                            if line_stripped.strip() == old_line.strip():
+                                updated_content.append(new_line + '\n')
+                                matched = True
+                                break
+                        if not matched:
+                            updated_content.append(line)
+                    
+                    # update file 
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.writelines(updated_content)
+                    
+                    # verify changes
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        verify_content = f.read()
+                        for _, new_line in changes:
+                            if new_line not in verify_content:
+                                print(f"⚠️ Warning: Failed to verify change: {new_line}") 
+                        
+                except Exception as e:
+                    print(f"❌ Error updating {file_path}: {str(e)}")
+                    print(f"Error details: {type(e).__name__}: {str(e)}")
+                    return diff, None
+            
+            # Single commit for all changes
+            total_changes = sum(len(changes) for changes in file_changes.values())
+            file_list = ', '.join(file_changes.keys())
+            
+            # Add all modified files
+            for file_path in file_changes.keys():
+                subprocess.run(["git", "add", file_path], check=True)
+                
+            commit_msg = f"Update {total_changes} TODOs with Linear issue IDs in {file_list}"
+            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print(f"✅ Updated and committed {total_changes} TODOs across {len(file_changes)} files")
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error committing changes: {str(e)}")
+            return diff, None
     
     return '\n'.join(updated_lines), todos
 
@@ -423,7 +431,7 @@ def handle_ai_pr(additional_args: list = None) -> int:
         print("✅ Got branch changes")
             
         # Process TODOs
-        print("\nChecking for new TODOs...")
+        print("\n\033[1mChecking for new TODOs...\033[0m")
         diff, todos = process_todos(diff)
         if todos is None:
             print("⚠️ TODO processing failed.")

@@ -138,9 +138,8 @@ When creating a pull request with `gait pr create --ai`, the tool automatically 
 
 ```bash
 # Example TODO comment format:
-# TODO: Implement error handling
-# TODO(context): Add unit tests
-# TODO(PROJ-123): Existing Linear issue reference
+# TODO:Implement error handling
+# TODO(context):(Add unit tests)
 
 # When creating a PR, TODOs will be:
 # 1. Detected and processed
