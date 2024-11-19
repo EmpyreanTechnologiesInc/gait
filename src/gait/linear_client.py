@@ -17,8 +17,20 @@ class LinearClient:
         self.team_id = os.getenv("LINEAR_TEAM_ID")
         self.project_id = os.getenv("LINEAR_PROJECT_ID")
         
-        if not all([self.api_key, self.team_id, self.project_id]):
-            raise ValueError("Missing required Linear environment variables")
+        # Check API key and team ID first
+        if not all([self.api_key, self.team_id]):
+            raise ValueError("Missing required Linear API key or team ID")
+            
+        # Special handling for missing project ID
+        if not self.project_id:
+            print("LINEAR_PROJECT_ID not found in environment variables")
+            transport = RequestsHTTPTransport(
+                url='https://api.linear.app/graphql',
+                headers={'Authorization': self.api_key}
+            )
+            self.client = Client(transport=transport, fetch_schema_from_transport=True)
+            self.list_available_teams()
+            raise ValueError("Please set LINEAR_PROJECT_ID to one of the above project IDs")
             
         transport = RequestsHTTPTransport(
             url='https://api.linear.app/graphql',
@@ -26,17 +38,28 @@ class LinearClient:
         )
         self.client = Client(transport=transport, fetch_schema_from_transport=True)
     
-    def create_issue(self, title: str) -> str:
+    def create_issue(self, title: str, file_path: str = None, line_content: str = None, context: str = None) -> str:
         """Create a Linear issue and return its identifier"""
         if self.test_mode:
-            return f"ENG-{abs(hash(title)) % 1000}"
+            # Generate a deterministic test ticket ID
+            return f"TEST-{abs(hash(title)) % 1000}"
+            
+        # Create description with context information
+        description = []
+        if file_path:
+            description.append(f"**File:** `{file_path}`")
+        if context:
+            description.append(f"**Context:** {context}")
+            
+        description = "\n\n".join(description)
             
         mutation = gql("""
-            mutation CreateIssue($title: String!, $teamId: String!, $projectId: String!) {
+            mutation CreateIssue($title: String!, $teamId: String!, $projectId: String!, $description: String) {
                 issueCreate(input: {
                     title: $title,
                     teamId: $teamId,
-                    projectId: $projectId
+                    projectId: $projectId,
+                    description: $description
                 }) {
                     success
                     issue {
@@ -50,16 +73,17 @@ class LinearClient:
             result = self.client.execute(mutation, variable_values={
                 'title': title,
                 'teamId': self.team_id,
-                'projectId': self.project_id
+                'projectId': self.project_id,
+                'description': description
             })
             return result['issueCreate']['issue']['identifier']
             
         except TransportQueryError as e:
             print(f"Error creating Linear issue: {str(e)}")
-            self._debug_available_teams()
+            self.list_available_teams()
             return None
             
-    def _debug_available_teams(self):
+    def list_available_teams(self):
         """Debug helper to list available teams and projects"""
         try:
             query = gql("""

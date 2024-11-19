@@ -261,8 +261,8 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
 
 def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
     """Process TODOs in the diff and create Linear issues."""
-    comment_prefix = r'^\+\s*(?:#|//|/\*)\s*'
-    todo_pattern = fr'{comment_prefix}TODO(?:\(([^)]*)\))?:\s+(.+?)(?:\s*\*/)?\s*$'
+    comment_prefix = r'\+.*?(?:#|//|/\*)\s*'
+    todo_pattern = fr'{comment_prefix}TODO\s*(?:\(([^)]*)\))?\s*:\s*(.+?)(?:\s*\*/)?\s*$'
     issue_id_pattern = r'^[A-Z]{2,}-\d+$'
     
     todos = []
@@ -274,11 +274,9 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
         linear_client = None if test_mode else LinearClient(test_mode=test_mode)
     except ValueError as e:
         print(f"⚠️ Linear client initialization failed: {str(e)}")
-        print("Will continue without creating Linear issues")
         linear_client = None
-    
-    print("\nDebug - Processing lines:")
-    
+        return None, None
+        
     for line in diff.split('\n'):
         if line.startswith('+++'):
             current_file = line[6:]
@@ -300,14 +298,15 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
         comment = todo_match.group(2).strip()
         
         if context and re.match(issue_id_pattern, context):
-            print(f"Debug - Skipping TODO with existing issue ID: {context} -> '{comment}'")
             todos.append((current_file, line, context, comment))
             updated_lines.append(line)
             continue
             
-        print(f"Debug - Creating new issue for TODO{f' with context: {context}' if context else ''}: '{comment}'")
-        issue_id = linear_client.create_issue(comment) if linear_client else None
-        print(f"Debug - Created issue: {issue_id}")
+        issue_id = linear_client.create_issue(
+            title=comment,
+            file_path=current_file,
+            context=context
+        ) if linear_client else None
         
         if issue_id:
             indent = re.match(r'^\+\s*', line).group()
@@ -325,7 +324,7 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
             updated_lines.append(new_line)
         else:
             print(f"⚠️ Keeping original TODO line due to Linear issue creation failure")
-            todos.append((current_file, line, None, comment))
+            todos.append((current_file, line, context, comment))
             updated_lines.append(line)
     
     # Update files if we have changes
@@ -336,13 +335,12 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.readlines()
                 
-                # 修改更新逻辑，使用更精确的匹配
                 updated_content = []
                 for line in content:
                     line_stripped = line.rstrip('\n')
                     matched = False
                     for old_line, new_line in changes:
-                        # 使用更严格的比较，确保完全匹配
+                        # strict match
                         if line_stripped.strip() == old_line.strip():
                             updated_content.append(new_line + '\n')
                             matched = True
@@ -350,16 +348,11 @@ def process_todos(diff: str, test_mode: bool = False) -> Tuple[str, list]:
                     if not matched:
                         updated_content.append(line)
                 
-                # 在写入前打印调试信息
-                print(f"Debug - Original content length: {len(content)}")
-                print(f"Debug - Updated content length: {len(updated_content)}")
-                print(f"Debug - Changes to apply: {len(changes)}")
-                
-                # 写入文件
+                # update file 
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.writelines(updated_content)
                 
-                # 验证更改是否成功应用
+                # verify changes
                 with open(file_path, 'r', encoding='utf-8') as f:
                     verify_content = f.read()
                     for _, new_line in changes:
@@ -428,11 +421,19 @@ def handle_ai_pr(additional_args: list = None) -> int:
         # Process TODOs
         print("\nChecking for new TODOs...")
         diff, todos = process_todos(diff)
-        if not todos:  # 如果 process_todos 返回 None，表示处理失败
-            print("❌ TODO processing failed. Aborting PR creation.")
-            return 1
+        if not todos:
+            print("⚠️ TODO processing failed.")
+            while True:
+                response = input("\033[1;33mWould you like to continue creating PR without processing TODOs? (y/n): \033[0m").lower()
+                if response == 'n':
+                    print("❌ Aborting PR creation.")
+                    return 1
+                elif response == 'y':
+                    print("Continuing without TODO processing...")
+                    break
+                else:
+                    print("Please answer 'y' (yes) or 'n' (no)")
         
-        # 只有在 TODO 处理成功后才继续
         print("\nGenerating PR content using AI...")
         title, body = generate_pr_content(diff, commits)
         if not title or not body:
