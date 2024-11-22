@@ -5,25 +5,22 @@ from dotenv import load_dotenv
 import os
 
 class LinearClient:
-    def __init__(self, test_mode: bool = False):
-        self.test_mode = test_mode
-        if not test_mode:
-            load_dotenv(override=True)
-            self._init_client()
+    def __init__(self):
+        load_dotenv(override=True)
+        self._init_client()
             
     def _init_client(self):
         """Initialize Linear GraphQL client"""
         self.api_key = os.getenv("LINEAR_API_KEY")
         self.team_id = os.getenv("LINEAR_TEAM_ID")
         self.project_id = os.getenv("LINEAR_PROJECT_ID")
-        # Check API key and team ID first
+
         if not self.api_key:
             raise ValueError("Missing required Linear API key")
         
         if not self.team_id:
             raise ValueError("Missing required Linear team ID")
             
-        # Special handling for missing project ID
         if not self.project_id:
             print("LINEAR_PROJECT_ID not found in environment variables")
             transport = RequestsHTTPTransport(
@@ -41,12 +38,7 @@ class LinearClient:
         self.client = Client(transport=transport, fetch_schema_from_transport=True)
     
     def create_issue(self, title: str, file_path: str = None, line_content: str = None, context: str = None) -> str:
-        """Create a Linear issue and return its identifier"""
-        if self.test_mode:
-            # Generate a deterministic test ticket ID
-            return f"TEST-{abs(hash(title)) % 1000}"
-            
-        # Create description with context information
+        # include file path and context in description to provide more context for the ticket
         description = []
         if file_path:
             description.append(f"**File:** `{file_path}`")

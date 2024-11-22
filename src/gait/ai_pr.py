@@ -48,10 +48,8 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
         ).stdout.strip()
         
         if remote_exists:
-            # Remote branch exists
             print(f"\nRemote branch 'origin/{current_branch}' exists.")
             
-            # Check for unpushed changes
             unpushed = subprocess.run(
                 ["git", "log", f"origin/{current_branch}..{current_branch}", "--oneline"],
                 capture_output=True,
@@ -102,7 +100,6 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
                 else:
                     print("Please choose 1 or 2")
         else:
-            # Remote branch doesn't exist
             print(f"\nRemote branch 'origin/{current_branch}' doesn't exist.")
             while True:
                 response = input(f"\033[1;33mWould you like to create a remote branch? (y/n): \033[0m").lower()
@@ -207,10 +204,10 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         Tuple[str, str]: (PR title, PR body)
         Empty strings if generation fails.
     """
-    # Load environment variables
+    
+    # Reload environment variables, incase it was changed
     load_dotenv(override=True) 
 
-    # Validate API key
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print("Error: OPENAI_API_KEY not found in environment variables. Please set it in .env file.")
@@ -331,10 +328,8 @@ def process_todos(diff: str) -> Tuple[str, list]:
             todos.append((current_file, line, context, comment))
             updated_lines.append(line)
     
-    # Update files if we have changes
     if file_changes:
         try:
-            # Update all files first
             for file_path, changes in file_changes.items():
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
@@ -352,11 +347,10 @@ def process_todos(diff: str) -> Tuple[str, list]:
                         if not matched:
                             updated_content.append(line)
                     
-                    # update file 
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.writelines(updated_content)
                     
-                    # verify changes
+                    # verify changes to ensure they were applied correctly
                     with open(file_path, 'r', encoding='utf-8') as f:
                         verify_content = f.read()
                         for _, new_line in changes:
@@ -368,11 +362,10 @@ def process_todos(diff: str) -> Tuple[str, list]:
                     print(f"Error details: {type(e).__name__}: {str(e)}")
                     return diff, None
             
-            # Single commit for all changes
+            # Single commit for all changes to keep commit history clean
             total_changes = sum(len(changes) for changes in file_changes.values())
             file_list = ', '.join(file_changes.keys())
             
-            # Add all modified files
             for file_path in file_changes.keys():
                 subprocess.run(["git", "add", file_path], check=True)
                 
@@ -399,7 +392,6 @@ def handle_ai_pr(additional_args: list = None) -> int:
     """
     print("\n🚀 Starting AI PR creation process...")
     
-    # Check GitHub CLI status first
     print("\nChecking GitHub CLI status...")
     auth_status, message = check_gh_auth()
     if not auth_status:
@@ -408,11 +400,9 @@ def handle_ai_pr(additional_args: list = None) -> int:
     print("✅ GitHub CLI check passed")
     
     try:
-        # Extract base branch from additional args if present
         base_branch = None
         if additional_args:
             try:
-                # Check for both --base and -b flags
                 base_idx = -1
                 if '--base' in additional_args:
                     base_idx = additional_args.index('--base')
@@ -422,15 +412,13 @@ def handle_ai_pr(additional_args: list = None) -> int:
                 if base_idx >= 0 and len(additional_args) > base_idx + 1:
                     base_branch = additional_args[base_idx + 1]
             except ValueError:
-                pass  # base flag not found in args
+                pass 
         
-        # Get changes
         diff, commits = get_branch_changes(base_branch)
         if not diff and not commits:
             return 1
         print("✅ Got branch changes")
             
-        # Process TODOs
         print("\n\033[1mChecking for new TODOs...\033[0m")
         diff, todos = process_todos(diff)
         if todos is None:
@@ -453,14 +441,13 @@ def handle_ai_pr(additional_args: list = None) -> int:
             return 1
         print("✅ PR content generated")
         
-        # Show preview
+        # Show preview so user can edit if needed
         print("\nGenerated PR Title:", title)
         print("\nGenerated PR Body:")
         print("-------------------")
         print(body)
         print("-------------------")
         
-        # Get user confirmation
         while True:
             response = input("\033[1;32m\nWould you like to create this PR? (y[es]/n[o]/e[dit]): \033[0m").lower()
             
@@ -481,38 +468,34 @@ def handle_ai_pr(additional_args: list = None) -> int:
                         try:
                             line = input()
                             lines.append(line)
-                        except EOFError:  # users press Ctrl+D or Ctrl+Z
+                        except EOFError: 
                             break
                     new_body = '\n'.join(lines)
-                except KeyboardInterrupt:  # users press Ctrl+C
+                except KeyboardInterrupt:  
                     print("\n\033[1;31mEditing cancelled.\033[0m")
                     continue
                 
-                # update title and body
                 title = new_title if new_title else title
                 body = new_body if new_body else body
                 
-                # display updated content preview
                 print("\n\033[1mUpdated PR content:\033[0m")
                 print(f"\nTitle: {title}")
                 print("\n\033[1mBody:\033[0m")
                 print("-------------------")
                 print(body)
                 print("-------------------")
-                continue  # back to confirmation prompt
+                continue  
                 
             elif response == 'y':
                 break
             else:
                 print("Please answer 'y' (yes), 'n' (no), or 'e' (edit)")
         
-        # filter out 'pr create' arguments
         if additional_args:
             filtered_args = [arg for arg in additional_args if arg not in ['pr', 'create']]
         else:
             filtered_args = None
             
-        # Create PR
         success, message = create_pull_request(title, body, filtered_args)
         print(message)
         return 0 if success else 1
