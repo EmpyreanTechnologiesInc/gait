@@ -114,3 +114,79 @@ class LinearClient:
             error_message = error_data.get('userPresentableMessage', str(e))
             print(f"❌ Error listing teams and projects: {error_type} - {error_message}")
             print(" Please check your Linear API key and team ID")
+
+    def complete_issue(self, issue_id: str) -> bool:
+        """
+        Mark a Linear issue as completed.
+        
+        Args:
+            issue_id: The Linear issue ID (e.g., 'ENG-123')
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            query = gql("""
+                query GetIssue($id: String!) {
+                    issue(id: $id) {
+                        id
+                        team {
+                            id
+                        }
+                    }
+                }
+            """)
+            
+            result = self.client.execute(query, variable_values={'id': issue_id})
+            if not result.get('issue'):
+                print(f"Issue {issue_id} not found")
+                return False
+                        
+            query = gql("""
+                query {
+                    workflowStates {
+                        nodes {
+                            id
+                            name
+                        }
+                    }
+                }
+            """)
+            
+            # search for the 'Done' state ID because different teams may have different workflow states
+            result = self.client.execute(query)
+            states = result['workflowStates']['nodes']
+            done_state = next((state for state in states if state['name'].lower() == 'done'), None)
+            
+            if not done_state:
+                print(f"Could not find 'Done' state")
+                return False
+            
+            mutation = gql("""
+                mutation UpdateIssue($issueId: String!, $stateId: String!) {
+                    issueUpdate(
+                        id: $issueId,
+                        input: { stateId: $stateId }
+                    ) {
+                        success
+                        issue {
+                            id
+                            title
+                        }
+                    }
+                }
+            """)
+            
+            result = self.client.execute(mutation, variable_values={
+                'issueId': issue_id,
+                'stateId': done_state['id']
+            })
+            
+            if result['issueUpdate']['success']:
+                print(f"✅ Marked Linear issue {issue_id} as done")
+                return True
+            return False
+            
+        except Exception as e:
+            print(f"Error completing issue {issue_id}: {str(e)}")
+            return False
