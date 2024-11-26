@@ -134,25 +134,18 @@ gait pr create --ai --base main               # Set target branch
 ```
 
 ### Linear Integration and TODO Processing
-When creating a pull request with `gait pr create --ai`, the tool automatically processes TODO comments in your changes:
-
-1. For new TODOs:
-   - Creates corresponding Linear issues
-   - Updates the TODO comment with the Linear issue ID
-   - Example: `# TODO: Add tests` becomes `# TODO(ENG-123): Add tests`
-
-2. For removed TODOs:
-   - Automatically marks the corresponding Linear issue as "Done"
-   - Example: When you remove `# TODO(ENG-123): Add tests`, issue ENG-123 will be marked as completed
+When creating a pull request with `gait pr create --ai`, the tool automatically scans for TODO comments in your changes and creates corresponding Linear issues. This helps track technical debt and follow-up tasks.
 
 ```bash
 # Example TODO comment format:
 # TODO:Implement error handling
 # TODO(context):(Add unit tests)
 
-# When creating a PR:
-# 1. New TODOs will be converted to Linear issues
-# 2. Removed TODOs will be marked as done in Linear
+# When creating a PR, TODOs will be:
+# 1. Detected and processed
+# 2. Converted to Linear issues
+# 3. Updated in your code with Linear issue IDs
+# Example: # TODO(PROJ-456): Implement error handling
 ```
 
 To use this feature, configure Linear in your `.env` file:
