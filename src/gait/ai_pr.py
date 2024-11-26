@@ -284,7 +284,6 @@ def process_todos(diff: str) -> Tuple[str, list]:
             continue
             
         if line.startswith('-'):
-            print(f"Removed TODO: {line}")
             todo_match = re.search(todo_pattern, line)
             if todo_match and current_file:
                 context = todo_match.group(1)
