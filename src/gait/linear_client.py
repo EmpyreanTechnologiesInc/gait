@@ -10,7 +10,6 @@ class LinearClient:
         self._init_client()
             
     def _init_client(self):
-        """Initialize Linear GraphQL client"""
         self.api_key = os.getenv("LINEAR_API_KEY")
         self.team_id = os.getenv("LINEAR_TEAM_ID")
         self.project_id = os.getenv("LINEAR_PROJECT_ID")
@@ -82,7 +81,6 @@ class LinearClient:
             return None
             
     def list_available_teams(self):
-        """Debug helper to list available teams and projects"""
         try:
             query = gql("""
                 query {
