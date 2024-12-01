@@ -291,7 +291,7 @@ def process_todos(diff: str) -> Tuple[str, list]:
                     removed_todos.append((current_file, context))
             updated_lines.append(line)
             continue
-            
+
         if not line.startswith('+'):
             updated_lines.append(line)
             continue

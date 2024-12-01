@@ -169,7 +169,6 @@ LINEAR_PROJECT_ID=your_project_id
 
 - API Key can be found in Settings > API
 
-
 ## Project Structure
 ```
 gait/
