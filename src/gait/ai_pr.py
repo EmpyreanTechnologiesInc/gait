@@ -6,6 +6,8 @@ from .github_wrapper import create_pull_request, check_gh_auth
 import os
 from pydantic import BaseModel
 import json
+import re
+from .linear_client import LinearClient
 
 """
 AI-powered Pull Request creation module.
@@ -46,10 +48,8 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
         ).stdout.strip()
         
         if remote_exists:
-            # Remote branch exists
             print(f"\nRemote branch 'origin/{current_branch}' exists.")
             
-            # Check for unpushed changes
             unpushed = subprocess.run(
                 ["git", "log", f"origin/{current_branch}..{current_branch}", "--oneline"],
                 capture_output=True,
@@ -100,7 +100,6 @@ def get_branch_changes(base_branch: str = None) -> Tuple[str, str]:
                 else:
                     print("Please choose 1 or 2")
         else:
-            # Remote branch doesn't exist
             print(f"\nRemote branch 'origin/{current_branch}' doesn't exist.")
             while True:
                 response = input(f"\033[1;33mWould you like to create a remote branch? (y/n): \033[0m").lower()
@@ -205,10 +204,10 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         Tuple[str, str]: (PR title, PR body)
         Empty strings if generation fails.
     """
-    # Load environment variables
+    
+    # Reload environment variables, incase it was changed
     load_dotenv(override=True) 
 
-    # Validate API key
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print("Error: OPENAI_API_KEY not found in environment variables. Please set it in .env file.")
@@ -257,6 +256,130 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
         print("3. You have access to the specified model")
         return "", ""
 
+def process_todos(diff: str) -> Tuple[str, list]:
+    """Process TODOs in the diff and create Linear issues."""
+    comment_prefix = r'\+.*?(?:#|//|/\*)\s*'
+    todo_pattern = fr'{comment_prefix}TODO\s*(?:\(([^)]*)\))?\s*:\s*(.+?)(?:\s*\*/)?\s*$'
+    issue_id_pattern = r'^[A-Z]{2,}-\d+$'
+    
+    todos = []
+    current_file = None
+    updated_lines = []
+    file_changes = {}
+    linear_client = None
+    
+    try:
+        linear_client = LinearClient()
+    except ValueError as e:
+        print(f"⚠️ Linear client initialization failed: {str(e)}")
+        return diff, None  # Return original diff and None for todos to trigger the confirmation prompt
+        
+    for line in diff.split('\n'):
+        if line.startswith('+++'):
+            current_file = line[6:]
+            if current_file.startswith('b/'):
+                current_file = current_file[2:]
+            updated_lines.append(line)
+            continue
+            
+        if not line.startswith('+'):
+            updated_lines.append(line)
+            continue
+            
+        todo_match = re.search(todo_pattern, line)
+        if not todo_match or not current_file:
+            updated_lines.append(line)
+            continue
+            
+        context = todo_match.group(1)
+        comment = todo_match.group(2).strip()
+        
+        if context and re.match(issue_id_pattern, context):
+            todos.append((current_file, line, context, comment))
+            updated_lines.append(line)
+            continue
+            
+        issue_id = linear_client.create_issue(
+            title=comment,
+            file_path=current_file,
+            context=context
+        ) if linear_client else None
+        
+        if not issue_id:
+            print(f"⚠️ Linear issue creation failed")
+            return diff, None  # Return original diff and None to trigger confirmation prompt
+            
+        if issue_id:
+            indent = re.match(r'^\+\s*', line).group()
+            comment_symbol = '#' if '#' in line else '//'
+            new_line = f"{indent}{comment_symbol} TODO({issue_id}):{comment}" if context is None else f"{indent}{comment_symbol} TODO({issue_id}):({context}):({comment})"
+            
+            if current_file not in file_changes:
+                file_changes[current_file] = []
+            file_changes[current_file].append((
+                line.lstrip('+'),
+                new_line.lstrip('+')
+            ))
+            
+            todos.append((current_file, new_line, issue_id, comment))
+            updated_lines.append(new_line)
+        else:
+            print(f"⚠️ Keeping original TODO line due to Linear issue creation failure")
+            todos.append((current_file, line, context, comment))
+            updated_lines.append(line)
+    
+    if file_changes:
+        try:
+            for file_path, changes in file_changes.items():
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.readlines()
+                    
+                    updated_content = []
+                    for line in content:
+                        line_stripped = line.rstrip('\n')
+                        matched = False
+                        for old_line, new_line in changes:
+                            if line_stripped.strip() == old_line.strip():
+                                updated_content.append(new_line + '\n')
+                                matched = True
+                                break
+                        if not matched:
+                            updated_content.append(line)
+                    
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.writelines(updated_content)
+                    
+                    # verify changes to ensure they were applied correctly
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        verify_content = f.read()
+                        for _, new_line in changes:
+                            if new_line not in verify_content:
+                                print(f"⚠️ Warning: Failed to verify change: {new_line}") 
+                        
+                except Exception as e:
+                    print(f"❌ Error updating {file_path}: {str(e)}")
+                    print(f"Error details: {type(e).__name__}: {str(e)}")
+                    return diff, None
+            
+            # Single commit for all changes to keep commit history clean
+            total_changes = sum(len(changes) for changes in file_changes.values())
+            file_list = ', '.join(file_changes.keys())
+            
+            for file_path in file_changes.keys():
+                subprocess.run(["git", "add", file_path], check=True)
+                
+            commit_msg = f"Update {total_changes} TODOs with Linear issue IDs in {file_list}"
+            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print(f"✅ Updated and committed {total_changes} TODOs across {len(file_changes)} files")
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error committing changes: {str(e)}")
+            return diff, None
+    
+    return '\n'.join(updated_lines), todos
+
 def handle_ai_pr(additional_args: list = None) -> int:              
     """
     Handle the AI PR creation process.
@@ -269,7 +392,6 @@ def handle_ai_pr(additional_args: list = None) -> int:
     """
     print("\n🚀 Starting AI PR creation process...")
     
-    # Check GitHub CLI status first
     print("\nChecking GitHub CLI status...")
     auth_status, message = check_gh_auth()
     if not auth_status:
@@ -278,11 +400,9 @@ def handle_ai_pr(additional_args: list = None) -> int:
     print("✅ GitHub CLI check passed")
     
     try:
-        # Extract base branch from additional args if present
         base_branch = None
         if additional_args:
             try:
-                # Check for both --base and -b flags
                 base_idx = -1
                 if '--base' in additional_args:
                     base_idx = additional_args.index('--base')
@@ -292,15 +412,28 @@ def handle_ai_pr(additional_args: list = None) -> int:
                 if base_idx >= 0 and len(additional_args) > base_idx + 1:
                     base_branch = additional_args[base_idx + 1]
             except ValueError:
-                pass  # base flag not found in args
+                pass 
         
-        # Get changes
         diff, commits = get_branch_changes(base_branch)
         if not diff and not commits:
             return 1
         print("✅ Got branch changes")
             
-        # Generate content
+        print("\n\033[1mChecking for new TODOs...\033[0m")
+        diff, todos = process_todos(diff)
+        if todos is None:
+            print("⚠️ TODO processing failed.")
+            while True:
+                response = input("\033[1;33mWould you like to continue creating PR without processing TODOs? (y/n): \033[0m").lower()
+                if response == 'n':
+                    print("❌ Aborting PR creation.")
+                    return 1
+                elif response == 'y':
+                    print("Continuing without TODO processing...")
+                    break
+                else:
+                    print("Please answer 'y' (yes) or 'n' (no)")
+        
         print("\nGenerating PR content using AI...")
         title, body = generate_pr_content(diff, commits)
         if not title or not body:
@@ -308,14 +441,13 @@ def handle_ai_pr(additional_args: list = None) -> int:
             return 1
         print("✅ PR content generated")
         
-        # Show preview
+        # Show preview so user can edit if needed
         print("\nGenerated PR Title:", title)
         print("\nGenerated PR Body:")
         print("-------------------")
         print(body)
         print("-------------------")
         
-        # Get user confirmation
         while True:
             response = input("\033[1;32m\nWould you like to create this PR? (y[es]/n[o]/e[dit]): \033[0m").lower()
             
@@ -336,38 +468,34 @@ def handle_ai_pr(additional_args: list = None) -> int:
                         try:
                             line = input()
                             lines.append(line)
-                        except EOFError:  # users press Ctrl+D or Ctrl+Z
+                        except EOFError: 
                             break
                     new_body = '\n'.join(lines)
-                except KeyboardInterrupt:  # users press Ctrl+C
+                except KeyboardInterrupt:  
                     print("\n\033[1;31mEditing cancelled.\033[0m")
                     continue
                 
-                # update title and body
                 title = new_title if new_title else title
                 body = new_body if new_body else body
                 
-                # display updated content preview
                 print("\n\033[1mUpdated PR content:\033[0m")
                 print(f"\nTitle: {title}")
                 print("\n\033[1mBody:\033[0m")
                 print("-------------------")
                 print(body)
                 print("-------------------")
-                continue  # back to confirmation prompt
+                continue  
                 
             elif response == 'y':
                 break
             else:
                 print("Please answer 'y' (yes), 'n' (no), or 'e' (edit)")
         
-        # filter out 'pr create' arguments
         if additional_args:
             filtered_args = [arg for arg in additional_args if arg not in ['pr', 'create']]
         else:
             filtered_args = None
             
-        # Create PR
         success, message = create_pull_request(title, body, filtered_args)
         print(message)
         return 0 if success else 1

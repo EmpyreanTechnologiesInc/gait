@@ -9,6 +9,7 @@
   - [Basic Git Commands](#basic-git-commands)
   - [AI-Generated Commits](#ai-generated-commits)
   - [AI-Generated Pull Requests](#ai-generated-pull-requests)
+  - [Linear Integration and TODO Processing](#linear-integration-and-todo-processing)
 - [Project Structure](#project-structure)
 
 
@@ -25,6 +26,7 @@
   ```
 - GitHub CLI (for PR features)
 - OpenAI (requires API key)
+- Linear (requires API key and team ID)
 
 ### BasicInstallation and Configuration
 For macOS:
@@ -131,6 +133,35 @@ gait pr create --ai --base main               # Set target branch
 # 3. Once accepted or edited, the PR will be created automatically using GitHub CLI
 ```
 
+### Linear Integration and TODO Processing
+When creating a pull request with `gait pr create --ai`, the tool automatically scans for TODO comments in your changes and creates corresponding Linear issues. This helps track technical debt and follow-up tasks.
+
+```bash
+# Example TODO comment format:
+# TODO:Implement error handling
+# TODO(context):(Add unit tests)
+
+# When creating a PR, TODOs will be:
+# 1. Detected and processed
+# 2. Converted to Linear issues
+# 3. Updated in your code with Linear issue IDs
+# Example: # TODO(PROJ-456): Implement error handling
+```
+
+To use this feature, configure Linear in your `.env` file:
+```bash
+LINEAR_API_KEY=your_linear_api_key
+LINEAR_TEAM_ID=your_team_id
+LINEAR_PROJECT_ID=your_project_id
+```
+- Team ID and Project ID can be found on the Linear webpage:
+  1. Press `Cmd/Ctrl + K`
+  2. Find "Copy model UUID"
+  3. select the ID to copy
+
+- API Key can be found in Settings > API
+
+
 ## Project Structure
 ```
 gait/
@@ -142,6 +173,7 @@ gait/
 │       ├── github_wrapper.py
 │       ├── ai_commit.py
 │       ├── ai_pr.py
+│       ├── linear_client.py
 │       └── utils.py
 ├── README.md
 ├── LICENSE
