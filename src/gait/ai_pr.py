@@ -258,7 +258,7 @@ def generate_pr_content(diff: str, commits: str) -> Tuple[str, str]:
 
 def process_todos(diff: str) -> Tuple[str, list]:
     """Process TODOs in the diff and create Linear issues."""
-    comment_prefix = r'\+.*?(?:#|//|/\*)\s*'
+    comment_prefix = r'[+-].*?(?:#|//|/\*)\s*'
     todo_pattern = fr'{comment_prefix}TODO\s*(?:\(([^)]*)\))?\s*:\s*(.+?)(?:\s*\*/)?\s*$'
     issue_id_pattern = r'^[A-Z]{2,}-\d+$'
     
@@ -273,7 +273,8 @@ def process_todos(diff: str) -> Tuple[str, list]:
     except ValueError as e:
         print(f"⚠️ Linear client initialization failed: {str(e)}")
         return diff, None  # Return original diff and None for todos to trigger the confirmation prompt
-        
+
+    removed_todos = [] 
     for line in diff.split('\n'):
         if line.startswith('+++'):
             current_file = line[6:]
@@ -282,6 +283,15 @@ def process_todos(diff: str) -> Tuple[str, list]:
             updated_lines.append(line)
             continue
             
+        if line.startswith('-'):
+            todo_match = re.search(todo_pattern, line)
+            if todo_match and current_file:
+                context = todo_match.group(1)
+                if context and re.match(issue_id_pattern, context):
+                    removed_todos.append((current_file, context))
+            updated_lines.append(line)
+            continue
+
         if not line.startswith('+'):
             updated_lines.append(line)
             continue
@@ -328,6 +338,17 @@ def process_todos(diff: str) -> Tuple[str, list]:
             todos.append((current_file, line, context, comment))
             updated_lines.append(line)
     
+    if removed_todos and linear_client:
+        print("\nProcessing removed TODOs...")
+        for file_path, issue_id in removed_todos:
+            try:
+                if linear_client.complete_issue(issue_id):
+                    print(f"✅ Marked Linear issue {issue_id} as done (removed from {file_path})")
+                else:
+                    print(f"⚠️ Failed to mark Linear issue {issue_id} as done")
+            except Exception as e:
+                print(f"❌ Error updating Linear issue {issue_id}: {str(e)}")
+
     if file_changes:
         try:
             for file_path, changes in file_changes.items():
